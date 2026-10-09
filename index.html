@@ -8,7 +8,7 @@
   :root {
     --bg: #fff7f2; --card: #ffffff; --ink: #3a2f3f; --muted: #8b7f90;
     --pink: #ff6b8b; --pink-soft: #ffe1e8; --mint: #38b79a; --mint-soft: #d9f4ec;
-    --line: #f0e3e0; --shadow: 0 12px 32px rgba(120, 70, 90, .15);
+    --line: #f0e3e0; --accent: var(--pink); --accent-soft: var(--pink-soft); --shadow: 0 12px 32px rgba(120, 70, 90, .15);
   }
   @media (prefers-color-scheme: dark) {
     :root {
@@ -16,10 +16,11 @@
       --pink-soft: #4a2a37; --mint-soft: #203b35; --line: #3a3042; --shadow: 0 12px 32px rgba(0,0,0,.4);
     }
   }
+  html[data-p="1"] { --accent: var(--mint); --accent-soft: var(--mint-soft); }
   * { box-sizing: border-box; }
   html, body { margin: 0; height: 100%; }
   body {
-    background: radial-gradient(circle at 20% 0%, var(--pink-soft), transparent 55%), var(--bg);
+    background: radial-gradient(circle at 20% 0%, var(--accent-soft), transparent 55%), var(--bg);
     color: var(--ink); font: 16px/1.4 ui-rounded, "SF Pro Rounded", system-ui, -apple-system, "Segoe UI", sans-serif;
     display: flex; justify-content: center;
   }
@@ -30,13 +31,14 @@
     border: 2px solid var(--line); background: var(--card); color: var(--ink); border-radius: 16px;
     padding: 8px 10px; font: inherit; cursor: pointer; text-align: left; position: relative;
   }
-  .player.active { border-color: var(--pink); box-shadow: 0 0 0 3px var(--pink-soft); }
+  .player.active { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .player.active small { color: var(--accent); font-weight: 700; }
   .player b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-right: 22px; }
   .player small { color: var(--muted); }
   .player .edit { position: absolute; right: 8px; top: 8px; font-size: .85rem; opacity: .6; }
   nav { display: flex; background: var(--card); border-radius: 14px; padding: 4px; border: 1px solid var(--line); }
   nav button { flex: 1; border: 0; background: none; color: var(--muted); font: inherit; font-weight: 600; padding: 8px; border-radius: 10px; cursor: pointer; }
-  nav button.on { background: var(--pink); color: #fff; }
+  nav button.on { background: var(--accent); color: #fff; }
   nav .count { font-weight: 700; }
   .filters { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; }
   .chip { border: 1px solid var(--line); background: var(--card); color: var(--ink); border-radius: 999px; padding: 4px 12px; font: inherit; font-size: .88rem; cursor: pointer; }
@@ -77,13 +79,20 @@
   .chips .chip { font-size: .85rem; }
   .row { display: flex; gap: 8px; }
   input[type=text] { flex: 1; min-width: 0; border: 1px solid var(--line); background: var(--bg); color: var(--ink); border-radius: 12px; padding: 10px 12px; font: inherit; }
-  .btn { border: 0; background: var(--pink); color: #fff; font: inherit; font-weight: 700; border-radius: 12px; padding: 10px 14px; cursor: pointer; }
+  .btn { border: 0; background: var(--accent); color: #fff; font: inherit; font-weight: 700; border-radius: 12px; padding: 10px 14px; cursor: pointer; }
   .btn.ghost { background: var(--card); color: var(--ink); border: 1px solid var(--line); }
   label.toggle { display: flex; gap: 8px; align-items: center; color: var(--muted); font-size: .88rem; }
   #toast { position: fixed; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom)); transform: translate(-50%, 30px); background: var(--ink); color: var(--bg); padding: 10px 18px; border-radius: 999px; font-weight: 700; opacity: 0; transition: .25s; pointer-events: none; z-index: 10; white-space: nowrap; }
   #toast.show { opacity: 1; transform: translate(-50%, 0); }
   .burst { position: fixed; pointer-events: none; font-size: 1.6rem; z-index: 9; animation: pop 1s ease-out forwards; }
   @keyframes pop { from { opacity: 1; transform: translate(0,0) scale(.6); } to { opacity: 0; transform: translate(var(--dx), var(--dy)) scale(1.4); } }
+  .turn { display: flex; align-items: center; justify-content: space-between; gap: 10px; background: var(--accent-soft); border-radius: 16px; padding: 10px 14px; }
+  .turn .who { font-size: 1.15rem; font-weight: 800; color: var(--accent); }
+  .turn small { display: block; color: var(--muted); font-weight: 600; }
+  #setup { position: fixed; inset: 0; background: rgba(30, 20, 35, .55); display: flex; align-items: center; justify-content: center; padding: 20px; z-index: 20; }
+  #setup form { background: var(--card); border-radius: 24px; padding: 22px; width: 100%; max-width: 380px; display: grid; gap: 12px; box-shadow: var(--shadow); }
+  #setup h2 { margin: 0; text-align: center; }
+  #setup label { font-weight: 700; font-size: .9rem; display: grid; gap: 4px; }
   .hidden { display: none !important; }
 </style>
 </head>
@@ -98,6 +107,7 @@
   </nav>
 
   <section id="swipe">
+    <div class="turn" id="turn"></div>
     <div class="filters" id="filters"></div>
     <div class="stage" id="stage"></div>
     <div class="actions">
@@ -130,17 +140,24 @@
     </div>
   </section>
 </div>
+<div id="setup" class="hidden">
+  <form id="setupForm">
+    <h2>👋 Who's picking?</h2>
+    <label>Your name <input type="text" id="setupMe" maxlength="20" required autocomplete="off"></label>
+    <label>Your partner's name <input type="text" id="setupPartner" maxlength="20" required autocomplete="off"></label>
+    <button class="btn">Let's go</button>
+  </form>
+</div>
 <div id="toast"></div>
 
 <script>
 // ---------- names ----------
 const RAW = {
-  n: "Avery Riley Quinn Rowan Wren Kai Logan Harper Ellis Cameron Charlie Jordan Sage River Phoenix Emerson Finley Hayden Harley Jamie Lennon Morgan Parker Reese Remy Robin Rory Sasha Skyler Taylor Teddy Blake Dakota Elliot Frankie Indigo Jules Kit Marlow Oakley Arden Ash Bailey Briar Cass Devon Eden Gray Ira Joey Lane London Max Noel Reed Sam Shiloh Tatum Val Rue Emery Sloane Sutton Peyton Kendall Darcy Lake Winter",
-  g: "Olivia Emma Charlotte Amelia Sophia Isabella Ava Mia Evelyn Luna Camila Gianna Elizabeth Eleanor Ella Abigail Sofia Scarlett Emily Aria Penelope Chloe Layla Mila Nora Hazel Madison Ellie Lily Nova Isla Grace Violet Aurora Zoey Willow Emilia Stella Zoe Victoria Hannah Addison Leah Lucy Eliana Ivy Everly Lillian Paisley Elena Naomi Maya Natalie Kinsley Delilah Claire Audrey Aaliyah Ruby Brooklyn Alice Aubrey Autumn Leilani Savannah Valentina Kennedy Madelyn Josephine Bella Sadie Natalia Caroline Allison Gabriella Anna Serenity Cora Ariana Lydia Jade Sarah Eva Adeline Madeline Piper Athena Vivian Clara Liliana Samantha Maria Iris Freya Margot Florence Beatrice Matilda Phoebe Daphne Juniper Thea Opal Esme Imogen Maeve Josie Tessa Rosalie Nina Elise Genevieve Odette Cleo Wilhelmina Harriet Poppy Marigold Rosemary Annabelle Fiona Gwendolyn Ingrid Lola",
-  b: "Liam Noah Oliver James Elijah William Henry Lucas Benjamin Theodore Mateo Levi Sebastian Daniel Jack Michael Alexander Owen Asher Samuel Ethan Leo Jackson Mason Ezra John Hudson Luca Aiden Joseph David Jacob Luke Julian Gabriel Grayson Wyatt Matthew Maverick Dylan Isaac Elias Anthony Thomas Josiah Lincoln Joshua Andrew Charles Caleb Isaiah Nathan Eli Miles Silas Jonathan Hunter Nolan Adrian Declan Jameson Ryan Cooper August Weston Jude Finn Felix Atticus Beau Milo Walter Arthur Hugo Oscar Louis Otis Rhys Callum Jasper Everett Graham Hayes Ronan Theo Soren Emmett Gideon Rhett Zachary Bodhi Sullivan Wesley Colin Dominic Edwin Frederick Harrison Ivan Jonah Knox Landon Malcolm Nico Orion Peter Quentin Roman Sawyer Tobias Victor Xavier Zane Barnaby Cormac Desmond Leopold Percy"
+  n: "Avery Riley Quinn Rowan Wren Kai Logan Harper Ellis Cameron Charlie Sage River Phoenix Emerson Finley Hayden Harley Lennon Morgan Parker Reese Remy Robin Rory Sasha Skyler Taylor Teddy Blake Dakota Frankie Indigo Jules Kit Marlow Oakley Arden Ash Bailey Briar Cass Devon Gray Lane London Max Noel Reed Tatum Val Rue Emery Sloane Sutton Peyton Kendall Darcy Lake Winter Alden Ainsley Aspen Brook Campbell Hollis Linden Marley Merritt Sterling Wilder Lennox Rio",
+  b: "Liam Oliver William Henry Theodore Sebastian Alexander Owen Leo Jackson Mason Hudson Aiden Julian Grayson Wyatt Maverick Dylan Anthony Lincoln Charles Miles Hunter Nolan Adrian Declan Ryan Cooper August Weston Finn Felix Atticus Beau Milo Walter Arthur Hugo Oscar Louis Otis Rhys Callum Jasper Everett Graham Hayes Ronan Theo Soren Emmett Rhett Bodhi Sullivan Colin Dominic Edwin Frederick Harrison Knox Landon Malcolm Nico Orion Roman Sawyer Victor Xavier Zane Cormac Desmond Leopold Percy Weston Ansel Bennett Brooks Cassius Cyrus Dashiell Easton Elio Hendrix Kingston Magnus Maxwell Nash Pierce Reid Rocco Stellan Zander Archer Briggs Calvin Clive Dexter Flynn Gus Heath Jett Keaton Lachlan Monroe Wesley Tristan Rupert Vincent Lawrence Ambrose Conrad Anders"
 };
 const NAMES = []; const seen = new Set();
-for (const cat of ["n", "g", "b"]) for (const n of RAW[cat].split(" ")) {
+for (const cat of ["n", "b"]) for (const n of RAW[cat].split(" ")) {
   if (!seen.has(n)) { seen.add(n); NAMES.push({ name: n, cat }); }
 }
 
@@ -148,10 +165,16 @@ for (const cat of ["n", "g", "b"]) for (const n of RAW[cat].split(" ")) {
 const KEY = "babynames-v1";
 const fresh = () => ({
   players: [{ name: "Me", liked: [], passed: [] }, { name: "Partner", liked: [], passed: [] }],
-  active: 0, custom: [], stars: [], filter: "all", reveal: true
+  active: 0, custom: [], stars: [], filter: "all", reveal: true, setup: false
 });
 let S;
 try { S = Object.assign(fresh(), JSON.parse(localStorage.getItem(KEY))); } catch { S = fresh(); }
+if (S.filter === "g") S.filter = "all";
+{ // drop picks that are no longer in the name list (e.g. removed girl/biblical names)
+  const known = new Set([...NAMES.map(x => x.name), ...S.custom]);
+  S.players.forEach(p => { p.liked = p.liked.filter(n => known.has(n)); p.passed = p.passed.filter(n => known.has(n)); });
+  S.stars = S.stars.filter(n => known.has(n));
+}
 const save = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch {} };
 
 let tab = "swipe", deck = [], history = [];
@@ -177,7 +200,7 @@ function renderPlayers() {
     b.className = "player" + (i === S.active ? " active" : "");
     b.innerHTML = "<b></b><small></small><span class='edit'>✎</span>";
     b.querySelector("b").textContent = p.name;
-    b.querySelector("small").textContent = p.liked.length + " loved";
+    b.querySelector("small").textContent = (i === S.active ? "swiping now · " : "tap to switch · ") + p.liked.length + " loved";
     b.onclick = e => {
       if (e.target.classList.contains("edit")) {
         const v = prompt("Name for this player:", p.name);
@@ -189,7 +212,7 @@ function renderPlayers() {
 }
 
 function renderFilters() {
-  const opts = [["all", "All"], ["g", "Girl"], ["b", "Boy"], ["n", "Neutral"]];
+  const opts = [["all", "All"], ["b", "Boy"], ["n", "Neutral"]];
   $("filters").innerHTML = "";
   for (const [k, label] of opts) {
     const b = document.createElement("button");
@@ -200,7 +223,7 @@ function renderFilters() {
   }
 }
 
-const TAGS = { g: "Girl", b: "Boy", n: "Any", c: "Yours" };
+const TAGS = { b: "Boy", n: "Neutral", c: "Yours" };
 function cardEl(item, front) {
   const c = document.createElement("div");
   c.className = "card " + (front ? "front" : "back");
@@ -267,8 +290,20 @@ function renderLists() {
   $("reveal").checked = S.reveal;
 }
 
+function renderTurn() {
+  const t = $("turn"); t.innerHTML = "";
+  const l = document.createElement("div");
+  const who = document.createElement("span"); who.className = "who"; who.textContent = me().name;
+  const sm = document.createElement("small"); sm.textContent = "Swiping as";
+  l.append(sm, who);
+  const b = document.createElement("button"); b.className = "btn ghost"; b.textContent = "I'm " + other().name;
+  b.onclick = () => { S.active = 1 - S.active; save(); buildDeck(); render(); };
+  t.append(l, b);
+}
+
 function render() {
-  renderPlayers(); renderFilters(); renderStage(); renderMatches(); renderLists();
+  document.documentElement.dataset.p = S.active;
+  renderTurn(); renderPlayers(); renderFilters(); renderStage(); renderMatches(); renderLists();
   const n = matches().length;
   $("matchCount").textContent = n ? `(${n})` : "";
   for (const b of document.querySelectorAll("#tabs button")) b.classList.toggle("on", b.dataset.tab === tab);
@@ -388,7 +423,20 @@ $("share").onclick = async () => {
   history.replaceState(null, "", location.pathname + location.search);
 })();
 
+function openSetup() {
+  $("setupMe").value = S.players[0].name === "Me" ? "" : S.players[0].name;
+  $("setupPartner").value = S.players[1].name === "Partner" ? "" : S.players[1].name;
+  $("setup").classList.remove("hidden"); $("setupMe").focus();
+}
+$("setupForm").onsubmit = e => {
+  e.preventDefault();
+  S.players[0].name = $("setupMe").value.trim().slice(0, 20);
+  S.players[1].name = $("setupPartner").value.trim().slice(0, 20);
+  S.setup = true; save(); $("setup").classList.add("hidden"); render();
+};
+
 buildDeck(); render();
+if (!S.setup) openSetup();
 </script>
 </body>
 </html>
