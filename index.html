@@ -90,7 +90,9 @@
   .turn .who { font-size: 1.15rem; font-weight: 800; color: var(--accent); }
   .turn small { display: block; color: var(--muted); font-weight: 600; }
   #setup { position: fixed; inset: 0; background: rgba(30, 20, 35, .55); display: flex; align-items: center; justify-content: center; padding: 20px; z-index: 20; }
-  #setup form { background: var(--card); border-radius: 24px; padding: 22px; width: 100%; max-width: 380px; display: grid; gap: 12px; box-shadow: var(--shadow); }
+  #setup .modal { background: var(--card); border-radius: 24px; padding: 22px; width: 100%; max-width: 380px; box-shadow: var(--shadow); }
+  .stack { display: grid; gap: 12px; }
+  .code { font: 800 1.4rem ui-monospace, Menlo, monospace; letter-spacing: 1px; text-align: center; padding: 10px; background: var(--accent-soft); border-radius: 12px; user-select: all; }
   #setup h2 { margin: 0; text-align: center; }
   #setup label { font-weight: 700; font-size: .9rem; display: grid; gap: 4px; }
   .hidden { display: none !important; }
@@ -130,10 +132,9 @@
   <section id="lists" class="hidden">
     <div class="panel" id="listsBody"></div>
     <div class="panel" style="margin-top:14px">
-      <h2>Swipe on separate phones</h2>
-      <p class="hint" style="text-align:left;margin:0 0 10px">Copy a link with the active player's picks, send it over, and when it's opened the picks load in as the partner's. Needs the app hosted somewhere both phones can open.</p>
-      <div class="row">
-        <button class="btn" id="share">Copy link with my picks</button>
+      <h2>Each on your own phone</h2>
+      <div id="roomBox"></div>
+      <div class="row" style="margin-top:12px">
         <button class="btn ghost" id="reset">Start over</button>
       </div>
       <label class="toggle" style="margin-top:12px"><input type="checkbox" id="reveal"> Announce matches while swiping</label>
@@ -141,12 +142,29 @@
   </section>
 </div>
 <div id="setup" class="hidden">
-  <form id="setupForm">
-    <h2>👋 Who's picking?</h2>
-    <label>Your name <input type="text" id="setupMe" maxlength="20" required autocomplete="off"></label>
-    <label>Your partner's name <input type="text" id="setupPartner" maxlength="20" required autocomplete="off"></label>
-    <button class="btn">Let's go</button>
-  </form>
+  <div class="modal">
+    <div id="setupChoose" class="stack">
+      <h2>👋 Let's pick a name!</h2>
+      <button class="btn" id="chooseRoom">📱 Each on our own phone</button>
+      <button class="btn ghost" id="chooseLocal">🤝 Sharing one phone</button>
+    </div>
+    <form id="roomForm" class="stack hidden">
+      <h2>📱 Your own phones</h2>
+      <label>Your name <input type="text" id="roomName" maxlength="20" autocomplete="off"></label>
+      <button class="btn" id="createBtn">Create a new room</button>
+      <p class="hint">or join your partner's room</p>
+      <label>Room code <input type="text" id="roomCode" maxlength="40" autocomplete="off" autocapitalize="off" placeholder="abcd-efgh-jkmn"></label>
+      <button class="btn ghost" type="button" id="joinBtn">Join room</button>
+      <button class="btn ghost" type="button" id="roomBack">Back</button>
+    </form>
+    <form id="setupForm" class="stack hidden">
+      <h2>🤝 Who's picking?</h2>
+      <label>Your name <input type="text" id="setupMe" maxlength="20" required autocomplete="off"></label>
+      <label>Your partner's name <input type="text" id="setupPartner" maxlength="20" required autocomplete="off"></label>
+      <button class="btn">Let's go</button>
+      <button class="btn ghost" type="button" id="localBack">Back</button>
+    </form>
+  </div>
 </div>
 <div id="toast"></div>
 
@@ -165,7 +183,7 @@ for (const cat of ["n", "b"]) for (const n of RAW[cat].split(" ")) {
 const KEY = "babynames-v1";
 const fresh = () => ({
   players: [{ name: "Me", liked: [], passed: [] }, { name: "Partner", liked: [], passed: [] }],
-  active: 0, custom: [], stars: [], filter: "all", reveal: true, setup: false
+  active: 0, custom: [], stars: [], filter: "all", reveal: true, setup: false, room: null, slot: 0
 });
 let S;
 try { S = Object.assign(fresh(), JSON.parse(localStorage.getItem(KEY))); } catch { S = fresh(); }
@@ -175,7 +193,8 @@ if (S.filter === "g") S.filter = "all";
   S.players.forEach(p => { p.liked = p.liked.filter(n => known.has(n)); p.passed = p.passed.filter(n => known.has(n)); });
   S.stars = S.stars.filter(n => known.has(n));
 }
-const save = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch {} };
+const persist = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch {} };
+const save = () => { persist(); schedulePush(); };
 
 let tab = "swipe", deck = [], history = [];
 const $ = id => document.getElementById(id);
@@ -200,12 +219,14 @@ function renderPlayers() {
     b.className = "player" + (i === S.active ? " active" : "");
     b.innerHTML = "<b></b><small></small><span class='edit'>✎</span>";
     b.querySelector("b").textContent = p.name;
-    b.querySelector("small").textContent = (i === S.active ? "swiping now · " : "tap to switch · ") + p.liked.length + " loved";
+    b.querySelector("small").textContent = (S.room ? (i === S.slot ? "you · " : "partner · ") : (i === S.active ? "swiping now · " : "tap to switch · ")) + p.liked.length + " loved";
+    if (S.room && i !== S.slot) b.querySelector(".edit").remove();
     b.onclick = e => {
+      if (S.room && i !== S.slot) return;
       if (e.target.classList.contains("edit")) {
         const v = prompt("Name for this player:", p.name);
         if (v && v.trim()) { p.name = v.trim().slice(0, 20); save(); render(); }
-      } else if (i !== S.active) { S.active = i; buildDeck(); render(); }
+      } else if (i !== S.active && !S.room) { S.active = i; buildDeck(); render(); }
     };
     $("players").appendChild(b);
   });
@@ -269,12 +290,13 @@ function renderMatches() {
     if (fav) li.className = "fav";
     const s = document.createElement("span"); s.textContent = n;
     const b = document.createElement("button"); b.textContent = fav ? "⭐" : "☆";
-    b.onclick = () => { S.stars = fav ? S.stars.filter(x => x !== n) : [...S.stars, n]; save(); renderMatches(); };
+    b.onclick = () => { S.stars = fav ? S.stars.filter(x => x !== n) : [...S.stars, n]; sharedDirty = true; save(); renderMatches(); };
     li.append(s, b); ul.appendChild(li);
   }
 }
 
 function renderLists() {
+  renderRoomBox();
   const body = $("listsBody"); body.innerHTML = "";
   S.players.forEach((p, i) => {
     const h = document.createElement("h2"); h.textContent = `${p.name}'s picks (${p.liked.length})`;
@@ -282,7 +304,7 @@ function renderLists() {
     if (!p.liked.length) { box.innerHTML = "<span class='hint'>Nothing yet</span>"; }
     for (const n of p.liked) {
       const c = document.createElement("button"); c.className = "chip"; c.textContent = n + " ✕"; c.title = "Remove";
-      c.onclick = () => { p.liked = p.liked.filter(x => x !== n); S.stars = S.stars.filter(x => x !== n); save(); buildDeck(); render(); };
+      c.onclick = () => { p.liked = p.liked.filter(x => x !== n); S.stars = S.stars.filter(x => x !== n); sharedDirty = true; save(); buildDeck(); render(); };
       box.appendChild(c);
     }
     body.append(h, box);
@@ -298,7 +320,8 @@ function renderTurn() {
   l.append(sm, who);
   const b = document.createElement("button"); b.className = "btn ghost"; b.textContent = "I'm " + other().name;
   b.onclick = () => { S.active = 1 - S.active; save(); buildDeck(); render(); };
-  t.append(l, b);
+  if (S.room) { const m = document.createElement("small"); m.id = "sync"; m.textContent = syncText(); t.append(l, m); }
+  else t.append(l, b);
 }
 
 function render() {
@@ -390,53 +413,169 @@ $("addForm").onsubmit = e => {
   if (!v) return;
   const name = v[0].toUpperCase() + v.slice(1);
   if (pool().some(x => x.name.toLowerCase() === name.toLowerCase())) { toast("Already in the list!"); return; }
-  S.custom.push(name); S.players.forEach(p => { p.passed = p.passed.filter(x => x !== name); });
+  S.custom.push(name); sharedDirty = true; S.players.forEach(p => { p.passed = p.passed.filter(x => x !== name); });
   $("addName").value = ""; save(); buildDeck(); deck.unshift({ name, cat: "c" }); render(); toast(`Added ${name}`);
 };
 $("reveal").onchange = e => { S.reveal = e.target.checked; save(); };
 $("reset").onclick = () => {
   if (!confirm("Clear all picks, matches and custom names?")) return;
-  const names = S.players.map(p => p.name); S = fresh(); S.players.forEach((p, i) => p.name = names[i]);
-  save(); buildDeck(); render();
+  const keep = { room: S.room, slot: S.slot, active: S.active, setup: S.setup, reveal: S.reveal };
+  const names = S.players.map(p => p.name); S = Object.assign(fresh(), keep); S.players.forEach((p, i) => p.name = names[i]);
+  sharedDirty = true; save(); buildDeck(); render();
 };
-$("share").onclick = async () => {
-  const payload = { n: me().name, l: me().liked, c: S.custom.filter(c => me().liked.includes(c)) };
-  const enc = btoa(unescape(encodeURIComponent(JSON.stringify(payload))));
-  const url = location.href.split("#")[0] + "#s=" + enc;
-  try { await navigator.clipboard.writeText(url); toast("Link copied!"); }
-  catch { prompt("Copy this link:", url); }
-};
+// ---------- live sync (AWS Lambda + DynamoDB) ----------
+const API_URL = "https://zhx3scqo6acvcx5lgjm6c4ulyq0zcwrh.lambda-url.us-east-2.on.aws/";
+const ROOM_RE = /^[a-z0-9-]{8,40}$/;
+let sharedDirty = false, dirtyVer = 0, pushedVer = 0, pushTimer = null, online = true, polling = false;
 
-// ---------- import from link ----------
-(function importShared() {
-  const m = location.hash.match(/^#s=(.+)$/); if (!m) return;
-  try {
-    const d = JSON.parse(decodeURIComponent(escape(atob(m[1]))));
-    if (!Array.isArray(d.l)) throw 0;
-    if (confirm(`Load ${String(d.n).slice(0, 20)}'s ${d.l.length} picks as the partner?`)) {
-      for (const c of d.c || []) if (!pool().some(x => x.name === c)) S.custom.push(String(c).slice(0, 30));
-      S.players[1].name = String(d.n).slice(0, 20);
-      S.players[1].liked = d.l.map(String).slice(0, 1000);
-      S.active = 0; save(); tab = "matches";
+const api = body => fetch(API_URL, { method: "POST", headers: { "content-type": "text/plain" }, body: JSON.stringify(body) })
+  .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); });
+const syncText = () => online ? "● live" : "○ reconnecting…";
+function setOnline(v) {
+  online = v; const el = $("sync"); if (el) el.textContent = syncText();
+}
+
+function schedulePush() {
+  if (!S.room) return;
+  dirtyVer++; clearTimeout(pushTimer); pushTimer = setTimeout(push, 300);
+}
+async function push() {
+  if (!S.room) return;
+  const v = dirtyVer, p = me(), sd = sharedDirty; sharedDirty = false;
+  const body = { action: "put", room: S.room, slot: S.slot, name: p.name, liked: p.liked };
+  if (sd) { body.custom = S.custom; body.stars = S.stars; }
+  try { await api(body); pushedVer = v; setOnline(true); }
+  catch { sharedDirty = sharedDirty || sd; setOnline(false); clearTimeout(pushTimer); pushTimer = setTimeout(push, 3000); }
+}
+
+function renderLight() {
+  renderPlayers(); renderTurn(); renderMatches(); renderLists();
+  const n = matches().length; $("matchCount").textContent = n ? `(${n})` : "";
+}
+
+function applyRemote(d) {
+  const before = new Set(matches());
+  let changed = false;
+  const o = d.players[1 - S.slot], op = S.players[1 - S.slot];
+  if (o && (op.name !== o.name || JSON.stringify(op.liked) !== JSON.stringify(o.liked))) { op.name = o.name; op.liked = o.liked; changed = true; }
+  const fresh_ = (d.custom || []).filter(c => !S.custom.includes(c));
+  if (fresh_.length) {
+    for (const c of fresh_) {
+      S.custom.push(c);
+      if (!me().liked.includes(c) && !me().passed.includes(c)) deck.splice(Math.floor(Math.random() * Math.min(deck.length + 1, 6)), 0, { name: c, cat: "c" });
     }
-  } catch { toast("Couldn't read that link"); }
-  history.replaceState(null, "", location.pathname + location.search);
-})();
+    changed = true;
+  }
+  if (!sharedDirty && JSON.stringify(d.stars || []) !== JSON.stringify(S.stars)) { S.stars = d.stars || []; changed = true; }
+  if (!changed) return;
+  persist(); renderLight();
+  if (S.reveal) for (const n of matches()) if (!before.has(n)) { toast(`It's a match: ${n}! 💞`); burst(); break; }
+}
 
-function openSetup() {
+async function poll() {
+  if (!S.room || polling || document.hidden || dirtyVer !== pushedVer) return;
+  polling = true;
+  try { applyRemote(await api({ action: "get", room: S.room })); setOnline(true); }
+  catch { setOnline(false); }
+  polling = false;
+}
+setInterval(poll, 3000);
+document.addEventListener("visibilitychange", () => { if (!document.hidden) poll(); });
+
+// ---------- rooms ----------
+const ROOM_CHARS = "abcdefghjkmnpqrstuvwxyz23456789";
+function newCode() {
+  const a = new Uint32Array(12); crypto.getRandomValues(a);
+  const c = [...a].map(x => ROOM_CHARS[x % ROOM_CHARS.length]).join("");
+  return c.slice(0, 4) + "-" + c.slice(4, 8) + "-" + c.slice(8);
+}
+const cleanCode = v => v.trim().toLowerCase().replace(/[^a-z0-9-]/g, "");
+const inviteUrl = () => location.href.split("#")[0] + "#room=" + S.room;
+
+function renderRoomBox() {
+  const box = $("roomBox"); box.innerHTML = "";
+  if (!S.room) {
+    box.innerHTML = "<p class='hint' style='text-align:left;margin:0 0 10px'>Create a room and your picks sync live between your phones, with nothing to send back and forth.</p>";
+    const b = document.createElement("button"); b.className = "btn"; b.textContent = "Create or join a room";
+    b.onclick = () => openSetup("roomForm"); box.appendChild(b);
+    return;
+  }
+  const c = document.createElement("div"); c.className = "code"; c.textContent = S.room;
+  const h = document.createElement("p"); h.className = "hint"; h.style.cssText = "text-align:left;margin:8px 0 10px";
+  h.textContent = "Send your partner this link (or the code). Opening it on their phone joins this room.";
+  const row = document.createElement("div"); row.className = "row";
+  const cp = document.createElement("button"); cp.className = "btn"; cp.textContent = "Copy invite link";
+  cp.onclick = async () => { try { await navigator.clipboard.writeText(inviteUrl()); toast("Invite link copied!"); } catch { prompt("Copy this link:", inviteUrl()); } };
+  const lv = document.createElement("button"); lv.className = "btn ghost"; lv.textContent = "Leave room";
+  lv.onclick = () => {
+    if (!confirm("Leave this room? Your picks stay on this phone but stop syncing.")) return;
+    S.room = null; S.slot = 0; S.active = 0; persist(); buildDeck(); render();
+  };
+  row.append(cp, lv); box.append(c, h, row);
+}
+
+function showSetup(view) {
+  $("setup").classList.remove("hidden");
+  for (const id of ["setupChoose", "roomForm", "setupForm"]) $(id).classList.toggle("hidden", id !== view);
+  const f = { roomForm: "roomName", setupForm: "setupMe" }[view]; if (f) $(f).focus();
+}
+function openSetup(view = "setupChoose") {
+  const mine = S.players[S.active].name;
   $("setupMe").value = S.players[0].name === "Me" ? "" : S.players[0].name;
   $("setupPartner").value = S.players[1].name === "Partner" ? "" : S.players[1].name;
-  $("setup").classList.remove("hidden"); $("setupMe").focus();
+  $("roomName").value = ["Me", "Partner"].includes(mine) ? "" : mine;
+  showSetup(view);
 }
+$("chooseRoom").onclick = () => showSetup("roomForm");
+$("chooseLocal").onclick = () => showSetup("setupForm");
+$("roomBack").onclick = $("localBack").onclick = () => showSetup("setupChoose");
+
 $("setupForm").onsubmit = e => {
   e.preventDefault();
+  S.room = null; S.slot = 0; S.active = 0;
   S.players[0].name = $("setupMe").value.trim().slice(0, 20);
   S.players[1].name = $("setupPartner").value.trim().slice(0, 20);
-  S.setup = true; save(); $("setup").classList.add("hidden"); render();
+  S.setup = true; persist(); $("setup").classList.add("hidden"); buildDeck(); render();
+};
+
+async function enterRoom(code, slot) {
+  const name = $("roomName").value.trim().slice(0, 20);
+  if (!name) { toast("Enter your name first"); $("roomName").focus(); return; }
+  if (slot === 1) {
+    try {
+      const d = await api({ action: "get", room: code });
+      if (!d.players["0"]) { toast("Couldn't find that room"); return; }
+    } catch { toast("Can't reach the server"); return; }
+  }
+  const mine = S.players[S.active];
+  const keepCustom = slot === 0;
+  S.players = [null, null];
+  S.players[slot] = { name, liked: mine.liked.slice(), passed: mine.passed.slice() };
+  S.players[1 - slot] = { name: "Partner", liked: [], passed: [] };
+  if (!keepCustom) { S.custom = []; S.stars = []; }
+  S.room = code; S.slot = slot; S.active = slot; S.setup = true;
+  sharedDirty = slot === 0; polling = false;
+  try { window.history.replaceState(null, "", location.pathname + location.search); } catch {}
+  $("setup").classList.add("hidden");
+  buildDeck();
+  if (slot === 1) { try { applyRemote(await api({ action: "get", room: code })); } catch {} }
+  tab = slot === 0 ? "lists" : "swipe";
+  save(); render();
+  toast(slot === 0 ? "Room created! Send your partner the invite." : "Joined the room!");
+}
+$("roomForm").onsubmit = e => { e.preventDefault(); enterRoom(newCode(), 0); };
+$("joinBtn").onclick = () => {
+  const code = cleanCode($("roomCode").value);
+  if (!ROOM_RE.test(code)) { toast("Check the room code"); return; }
+  enterRoom(code, 1);
 };
 
 buildDeck(); render();
-if (!S.setup) openSetup();
+{
+  const m = location.hash.match(/^#room=([a-z0-9-]{8,40})$/);
+  if (m && S.room !== m[1]) { openSetup("roomForm"); $("roomCode").value = m[1]; $("roomName").focus(); }
+  else if (!S.setup) openSetup();
+}
 </script>
 </body>
 </html>
