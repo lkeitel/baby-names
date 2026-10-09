@@ -1,0 +1,394 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Little Name Picker</title>
+<style>
+  :root {
+    --bg: #fff7f2; --card: #ffffff; --ink: #3a2f3f; --muted: #8b7f90;
+    --pink: #ff6b8b; --pink-soft: #ffe1e8; --mint: #38b79a; --mint-soft: #d9f4ec;
+    --line: #f0e3e0; --shadow: 0 12px 32px rgba(120, 70, 90, .15);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1c1720; --card: #2a2230; --ink: #f6ecf3; --muted: #a698ad;
+      --pink-soft: #4a2a37; --mint-soft: #203b35; --line: #3a3042; --shadow: 0 12px 32px rgba(0,0,0,.4);
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: radial-gradient(circle at 20% 0%, var(--pink-soft), transparent 55%), var(--bg);
+    color: var(--ink); font: 16px/1.4 ui-rounded, "SF Pro Rounded", system-ui, -apple-system, "Segoe UI", sans-serif;
+    display: flex; justify-content: center;
+  }
+  #app { width: 100%; max-width: 480px; padding: 16px 16px calc(24px + env(safe-area-inset-bottom)); display: flex; flex-direction: column; gap: 14px; min-height: 100%; }
+  h1 { font-size: 1.25rem; margin: 4px 0 0; text-align: center; letter-spacing: .2px; }
+  .players { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .player {
+    border: 2px solid var(--line); background: var(--card); color: var(--ink); border-radius: 16px;
+    padding: 8px 10px; font: inherit; cursor: pointer; text-align: left; position: relative;
+  }
+  .player.active { border-color: var(--pink); box-shadow: 0 0 0 3px var(--pink-soft); }
+  .player b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-right: 22px; }
+  .player small { color: var(--muted); }
+  .player .edit { position: absolute; right: 8px; top: 8px; font-size: .85rem; opacity: .6; }
+  nav { display: flex; background: var(--card); border-radius: 14px; padding: 4px; border: 1px solid var(--line); }
+  nav button { flex: 1; border: 0; background: none; color: var(--muted); font: inherit; font-weight: 600; padding: 8px; border-radius: 10px; cursor: pointer; }
+  nav button.on { background: var(--pink); color: #fff; }
+  nav .count { font-weight: 700; }
+  .filters { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; }
+  .chip { border: 1px solid var(--line); background: var(--card); color: var(--ink); border-radius: 999px; padding: 4px 12px; font: inherit; font-size: .88rem; cursor: pointer; }
+  .chip.on { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+  .stage { position: relative; height: 340px; margin: 4px 0; touch-action: pan-y; user-select: none; }
+  .card {
+    position: absolute; inset: 0; background: var(--card); border-radius: 28px; box-shadow: var(--shadow);
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 20px;
+    cursor: grab; will-change: transform;
+  }
+  .card.back { transform: scale(.95) translateY(12px); opacity: .6; z-index: 0; cursor: default; }
+  .card.front { z-index: 1; }
+  .card .name { font-size: clamp(2.4rem, 12vw, 3.4rem); font-weight: 800; text-align: center; word-break: break-word; line-height: 1.05; }
+  .tag { font-size: .8rem; font-weight: 700; padding: 3px 12px; border-radius: 999px; }
+  .tag.g { background: var(--pink-soft); color: var(--pink); }
+  .tag.b { background: var(--mint-soft); color: var(--mint); }
+  .tag.n { background: #fff0c9; color: #b8860b; }
+  .tag.c { background: #e8e1ff; color: #7a5cff; }
+  .card a { color: var(--muted); font-size: .85rem; }
+  .stamp { position: absolute; top: 22px; font-weight: 900; font-size: 1.6rem; border: 4px solid; border-radius: 12px; padding: 2px 12px; opacity: 0; transform: rotate(-12deg); pointer-events: none; }
+  .stamp.like { left: 22px; color: var(--mint); }
+  .stamp.nope { right: 22px; color: var(--pink); transform: rotate(12deg); }
+  .actions { display: flex; justify-content: center; align-items: center; gap: 22px; }
+  .round { width: 68px; height: 68px; border-radius: 50%; border: 0; font-size: 1.9rem; background: var(--card); box-shadow: var(--shadow); cursor: pointer; transition: transform .1s; }
+  .round:active { transform: scale(.92); }
+  .round.small { width: 46px; height: 46px; font-size: 1.1rem; color: var(--muted); }
+  .round:disabled { opacity: .4; cursor: default; }
+  .hint { text-align: center; color: var(--muted); font-size: .85rem; margin: 0; }
+  .empty { text-align: center; padding: 28px 12px; color: var(--muted); }
+  .empty .big { font-size: 2.6rem; }
+  .panel { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 14px; }
+  .panel h2 { margin: 0 0 8px; font-size: 1rem; }
+  ul.matches { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+  ul.matches li { display: flex; align-items: center; justify-content: space-between; background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 10px 14px; font-size: 1.3rem; font-weight: 700; }
+  ul.matches li.fav { border-color: #f5b301; background: #fff8e1; color: #3a2f3f; }
+  ul.matches button { border: 0; background: none; font-size: 1.4rem; cursor: pointer; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chips .chip { font-size: .85rem; }
+  .row { display: flex; gap: 8px; }
+  input[type=text] { flex: 1; min-width: 0; border: 1px solid var(--line); background: var(--bg); color: var(--ink); border-radius: 12px; padding: 10px 12px; font: inherit; }
+  .btn { border: 0; background: var(--pink); color: #fff; font: inherit; font-weight: 700; border-radius: 12px; padding: 10px 14px; cursor: pointer; }
+  .btn.ghost { background: var(--card); color: var(--ink); border: 1px solid var(--line); }
+  label.toggle { display: flex; gap: 8px; align-items: center; color: var(--muted); font-size: .88rem; }
+  #toast { position: fixed; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom)); transform: translate(-50%, 30px); background: var(--ink); color: var(--bg); padding: 10px 18px; border-radius: 999px; font-weight: 700; opacity: 0; transition: .25s; pointer-events: none; z-index: 10; white-space: nowrap; }
+  #toast.show { opacity: 1; transform: translate(-50%, 0); }
+  .burst { position: fixed; pointer-events: none; font-size: 1.6rem; z-index: 9; animation: pop 1s ease-out forwards; }
+  @keyframes pop { from { opacity: 1; transform: translate(0,0) scale(.6); } to { opacity: 0; transform: translate(var(--dx), var(--dy)) scale(1.4); } }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+<div id="app">
+  <h1>🍼 Little Name Picker</h1>
+  <div class="players" id="players"></div>
+  <nav id="tabs">
+    <button data-tab="swipe" class="on">Swipe</button>
+    <button data-tab="matches">Matches <span class="count" id="matchCount"></span></button>
+    <button data-tab="lists">Lists</button>
+  </nav>
+
+  <section id="swipe">
+    <div class="filters" id="filters"></div>
+    <div class="stage" id="stage"></div>
+    <div class="actions">
+      <button class="round small" id="undo" title="Undo (Z)">↺</button>
+      <button class="round" id="pass" title="Pass (←)">✕</button>
+      <button class="round" id="like" title="Love it (→)">💗</button>
+    </div>
+    <p class="hint" id="remaining"></p>
+    <div class="panel">
+      <h2>Got a name in mind?</h2>
+      <form class="row" id="addForm">
+        <input type="text" id="addName" placeholder="Add your own name" maxlength="30" autocomplete="off">
+        <button class="btn">Add</button>
+      </form>
+    </div>
+  </section>
+
+  <section id="matches" class="hidden"></section>
+
+  <section id="lists" class="hidden">
+    <div class="panel" id="listsBody"></div>
+    <div class="panel" style="margin-top:14px">
+      <h2>Swipe on separate phones</h2>
+      <p class="hint" style="text-align:left;margin:0 0 10px">Copy a link with the active player's picks, send it over, and when it's opened the picks load in as the partner's. Needs the app hosted somewhere both phones can open.</p>
+      <div class="row">
+        <button class="btn" id="share">Copy link with my picks</button>
+        <button class="btn ghost" id="reset">Start over</button>
+      </div>
+      <label class="toggle" style="margin-top:12px"><input type="checkbox" id="reveal"> Announce matches while swiping</label>
+    </div>
+  </section>
+</div>
+<div id="toast"></div>
+
+<script>
+// ---------- names ----------
+const RAW = {
+  n: "Avery Riley Quinn Rowan Wren Kai Logan Harper Ellis Cameron Charlie Jordan Sage River Phoenix Emerson Finley Hayden Harley Jamie Lennon Morgan Parker Reese Remy Robin Rory Sasha Skyler Taylor Teddy Blake Dakota Elliot Frankie Indigo Jules Kit Marlow Oakley Arden Ash Bailey Briar Cass Devon Eden Gray Ira Joey Lane London Max Noel Reed Sam Shiloh Tatum Val Rue Emery Sloane Sutton Peyton Kendall Darcy Lake Winter",
+  g: "Olivia Emma Charlotte Amelia Sophia Isabella Ava Mia Evelyn Luna Camila Gianna Elizabeth Eleanor Ella Abigail Sofia Scarlett Emily Aria Penelope Chloe Layla Mila Nora Hazel Madison Ellie Lily Nova Isla Grace Violet Aurora Zoey Willow Emilia Stella Zoe Victoria Hannah Addison Leah Lucy Eliana Ivy Everly Lillian Paisley Elena Naomi Maya Natalie Kinsley Delilah Claire Audrey Aaliyah Ruby Brooklyn Alice Aubrey Autumn Leilani Savannah Valentina Kennedy Madelyn Josephine Bella Sadie Natalia Caroline Allison Gabriella Anna Serenity Cora Ariana Lydia Jade Sarah Eva Adeline Madeline Piper Athena Vivian Clara Liliana Samantha Maria Iris Freya Margot Florence Beatrice Matilda Phoebe Daphne Juniper Thea Opal Esme Imogen Maeve Josie Tessa Rosalie Nina Elise Genevieve Odette Cleo Wilhelmina Harriet Poppy Marigold Rosemary Annabelle Fiona Gwendolyn Ingrid Lola",
+  b: "Liam Noah Oliver James Elijah William Henry Lucas Benjamin Theodore Mateo Levi Sebastian Daniel Jack Michael Alexander Owen Asher Samuel Ethan Leo Jackson Mason Ezra John Hudson Luca Aiden Joseph David Jacob Luke Julian Gabriel Grayson Wyatt Matthew Maverick Dylan Isaac Elias Anthony Thomas Josiah Lincoln Joshua Andrew Charles Caleb Isaiah Nathan Eli Miles Silas Jonathan Hunter Nolan Adrian Declan Jameson Ryan Cooper August Weston Jude Finn Felix Atticus Beau Milo Walter Arthur Hugo Oscar Louis Otis Rhys Callum Jasper Everett Graham Hayes Ronan Theo Soren Emmett Gideon Rhett Zachary Bodhi Sullivan Wesley Colin Dominic Edwin Frederick Harrison Ivan Jonah Knox Landon Malcolm Nico Orion Peter Quentin Roman Sawyer Tobias Victor Xavier Zane Barnaby Cormac Desmond Leopold Percy"
+};
+const NAMES = []; const seen = new Set();
+for (const cat of ["n", "g", "b"]) for (const n of RAW[cat].split(" ")) {
+  if (!seen.has(n)) { seen.add(n); NAMES.push({ name: n, cat }); }
+}
+
+// ---------- state ----------
+const KEY = "babynames-v1";
+const fresh = () => ({
+  players: [{ name: "Me", liked: [], passed: [] }, { name: "Partner", liked: [], passed: [] }],
+  active: 0, custom: [], stars: [], filter: "all", reveal: true
+});
+let S;
+try { S = Object.assign(fresh(), JSON.parse(localStorage.getItem(KEY))); } catch { S = fresh(); }
+const save = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch {} };
+
+let tab = "swipe", deck = [], history = [];
+const $ = id => document.getElementById(id);
+const me = () => S.players[S.active];
+const other = () => S.players[1 - S.active];
+const pool = () => NAMES.concat(S.custom.map(name => ({ name, cat: "c" })));
+const matches = () => S.players[0].liked.filter(n => S.players[1].liked.includes(n));
+const shuffle = a => { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+
+function buildDeck() {
+  const done = new Set([...me().liked, ...me().passed]);
+  const items = pool().filter(x => !done.has(x.name) && (S.filter === "all" || x.cat === S.filter || x.cat === "c"));
+  deck = shuffle(items);
+  history = [];
+}
+
+// ---------- rendering ----------
+function renderPlayers() {
+  $("players").innerHTML = "";
+  S.players.forEach((p, i) => {
+    const b = document.createElement("button");
+    b.className = "player" + (i === S.active ? " active" : "");
+    b.innerHTML = "<b></b><small></small><span class='edit'>✎</span>";
+    b.querySelector("b").textContent = p.name;
+    b.querySelector("small").textContent = p.liked.length + " loved";
+    b.onclick = e => {
+      if (e.target.classList.contains("edit")) {
+        const v = prompt("Name for this player:", p.name);
+        if (v && v.trim()) { p.name = v.trim().slice(0, 20); save(); render(); }
+      } else if (i !== S.active) { S.active = i; buildDeck(); render(); }
+    };
+    $("players").appendChild(b);
+  });
+}
+
+function renderFilters() {
+  const opts = [["all", "All"], ["g", "Girl"], ["b", "Boy"], ["n", "Neutral"]];
+  $("filters").innerHTML = "";
+  for (const [k, label] of opts) {
+    const b = document.createElement("button");
+    b.className = "chip" + (S.filter === k ? " on" : "");
+    b.textContent = label;
+    b.onclick = () => { S.filter = k; save(); buildDeck(); render(); };
+    $("filters").appendChild(b);
+  }
+}
+
+const TAGS = { g: "Girl", b: "Boy", n: "Any", c: "Yours" };
+function cardEl(item, front) {
+  const c = document.createElement("div");
+  c.className = "card " + (front ? "front" : "back");
+  c.innerHTML = "<span class='stamp like'>LOVE</span><span class='stamp nope'>NOPE</span><div class='name'></div><span class='tag'></span>";
+  c.querySelector(".name").textContent = item.name;
+  const t = c.querySelector(".tag"); t.className = "tag " + item.cat; t.textContent = TAGS[item.cat];
+  if (front) {
+    const a = document.createElement("a");
+    a.href = "https://www.behindthename.com/name/" + encodeURIComponent(item.name.toLowerCase());
+    a.target = "_blank"; a.rel = "noopener"; a.textContent = "meaning & origin ↗";
+    a.addEventListener("pointerdown", e => e.stopPropagation());
+    c.appendChild(a);
+  }
+  return c;
+}
+
+function renderStage() {
+  const st = $("stage"); st.innerHTML = "";
+  const has = deck.length > 0;
+  $("like").disabled = $("pass").disabled = !has;
+  $("undo").disabled = history.length === 0;
+  if (!has) {
+    st.innerHTML = "<div class='empty'><div class='big'>🎉</div><p>You've seen every name here!<br>Try another filter, add your own, or hand the phone over.</p></div>";
+  } else {
+    if (deck[1]) st.appendChild(cardEl(deck[1], false));
+    const f = cardEl(deck[0], true); st.appendChild(f); attachDrag(f);
+  }
+  $("remaining").textContent = has ? `${deck.length} name${deck.length === 1 ? "" : "s"} left for ${me().name}` : "";
+}
+
+function renderMatches() {
+  const m = matches().sort((a, b) => S.stars.includes(b) - S.stars.includes(a));
+  const el = $("matches");
+  if (!m.length) {
+    el.innerHTML = "<div class='empty'><div class='big'>💞</div><p>No matches yet.<br>Names you both love will show up here.</p></div>";
+    return;
+  }
+  el.innerHTML = "<p class='hint' style='margin-bottom:10px'>Tap the star to mark your top picks.</p><ul class='matches'></ul>";
+  const ul = el.querySelector("ul");
+  for (const n of m) {
+    const li = document.createElement("li");
+    const fav = S.stars.includes(n);
+    if (fav) li.className = "fav";
+    const s = document.createElement("span"); s.textContent = n;
+    const b = document.createElement("button"); b.textContent = fav ? "⭐" : "☆";
+    b.onclick = () => { S.stars = fav ? S.stars.filter(x => x !== n) : [...S.stars, n]; save(); renderMatches(); };
+    li.append(s, b); ul.appendChild(li);
+  }
+}
+
+function renderLists() {
+  const body = $("listsBody"); body.innerHTML = "";
+  S.players.forEach((p, i) => {
+    const h = document.createElement("h2"); h.textContent = `${p.name}'s picks (${p.liked.length})`;
+    const box = document.createElement("div"); box.className = "chips"; box.style.marginBottom = i === 0 ? "16px" : "0";
+    if (!p.liked.length) { box.innerHTML = "<span class='hint'>Nothing yet</span>"; }
+    for (const n of p.liked) {
+      const c = document.createElement("button"); c.className = "chip"; c.textContent = n + " ✕"; c.title = "Remove";
+      c.onclick = () => { p.liked = p.liked.filter(x => x !== n); S.stars = S.stars.filter(x => x !== n); save(); buildDeck(); render(); };
+      box.appendChild(c);
+    }
+    body.append(h, box);
+  });
+  $("reveal").checked = S.reveal;
+}
+
+function render() {
+  renderPlayers(); renderFilters(); renderStage(); renderMatches(); renderLists();
+  const n = matches().length;
+  $("matchCount").textContent = n ? `(${n})` : "";
+  for (const b of document.querySelectorAll("#tabs button")) b.classList.toggle("on", b.dataset.tab === tab);
+  for (const id of ["swipe", "matches", "lists"]) $(id).classList.toggle("hidden", id !== tab);
+}
+
+// ---------- actions ----------
+function toast(msg) {
+  const t = $("toast"); t.textContent = msg; t.classList.add("show");
+  clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove("show"), 1800);
+}
+function burst() {
+  const emojis = ["💗", "✨", "🍼", "🧸", "💞", "🌟"];
+  for (let i = 0; i < 14; i++) {
+    const e = document.createElement("div"); e.className = "burst";
+    e.textContent = emojis[i % emojis.length];
+    e.style.left = "50%"; e.style.top = "40%";
+    e.style.setProperty("--dx", (Math.random() * 300 - 150) + "px");
+    e.style.setProperty("--dy", (Math.random() * -260 - 20) + "px");
+    document.body.appendChild(e); setTimeout(() => e.remove(), 1000);
+  }
+}
+
+function decide(like) {
+  if (!deck.length) return;
+  const item = deck.shift();
+  const list = like ? me().liked : me().passed;
+  list.push(item.name);
+  history.push({ item, like });
+  if (like && S.reveal && other().liked.includes(item.name)) {
+    toast(`It's a match: ${item.name}! 💞`); burst();
+  }
+  save(); render();
+}
+
+function undo() {
+  const h = history.pop(); if (!h) return;
+  const list = h.like ? me().liked : me().passed;
+  const i = list.lastIndexOf(h.item.name); if (i > -1) list.splice(i, 1);
+  deck.unshift(h.item); save(); render();
+}
+
+function attachDrag(card) {
+  let sx = 0, dx = 0, dragging = false;
+  const likeS = card.querySelector(".stamp.like"), nopeS = card.querySelector(".stamp.nope");
+  card.addEventListener("pointerdown", e => { dragging = true; sx = e.clientX; card.setPointerCapture(e.pointerId); card.style.transition = "none"; });
+  card.addEventListener("pointermove", e => {
+    if (!dragging) return;
+    dx = e.clientX - sx;
+    card.style.transform = `translateX(${dx}px) rotate(${dx / 18}deg)`;
+    likeS.style.opacity = Math.min(Math.max(dx / 100, 0), 1);
+    nopeS.style.opacity = Math.min(Math.max(-dx / 100, 0), 1);
+  });
+  const end = () => {
+    if (!dragging) return; dragging = false;
+    if (Math.abs(dx) > 100) {
+      const dir = dx > 0 ? 1 : -1;
+      card.style.transition = "transform .25s, opacity .25s";
+      card.style.transform = `translateX(${dir * 500}px) rotate(${dir * 25}deg)`; card.style.opacity = 0;
+      setTimeout(() => decide(dir > 0), 200);
+    } else {
+      card.style.transition = "transform .2s"; card.style.transform = "";
+      likeS.style.opacity = nopeS.style.opacity = 0;
+    }
+    dx = 0;
+  };
+  card.addEventListener("pointerup", end); card.addEventListener("pointercancel", end);
+}
+
+// ---------- wiring ----------
+$("like").onclick = () => decide(true);
+$("pass").onclick = () => decide(false);
+$("undo").onclick = undo;
+document.addEventListener("keydown", e => {
+  if (tab !== "swipe" || e.target.tagName === "INPUT") return;
+  if (e.key === "ArrowRight") decide(true);
+  else if (e.key === "ArrowLeft") decide(false);
+  else if (e.key.toLowerCase() === "z") undo();
+});
+$("tabs").onclick = e => { const t = e.target.closest("button"); if (t) { tab = t.dataset.tab; render(); } };
+$("addForm").onsubmit = e => {
+  e.preventDefault();
+  const v = $("addName").value.trim().replace(/\s+/g, " ");
+  if (!v) return;
+  const name = v[0].toUpperCase() + v.slice(1);
+  if (pool().some(x => x.name.toLowerCase() === name.toLowerCase())) { toast("Already in the list!"); return; }
+  S.custom.push(name); S.players.forEach(p => { p.passed = p.passed.filter(x => x !== name); });
+  $("addName").value = ""; save(); buildDeck(); deck.unshift({ name, cat: "c" }); render(); toast(`Added ${name}`);
+};
+$("reveal").onchange = e => { S.reveal = e.target.checked; save(); };
+$("reset").onclick = () => {
+  if (!confirm("Clear all picks, matches and custom names?")) return;
+  const names = S.players.map(p => p.name); S = fresh(); S.players.forEach((p, i) => p.name = names[i]);
+  save(); buildDeck(); render();
+};
+$("share").onclick = async () => {
+  const payload = { n: me().name, l: me().liked, c: S.custom.filter(c => me().liked.includes(c)) };
+  const enc = btoa(unescape(encodeURIComponent(JSON.stringify(payload))));
+  const url = location.href.split("#")[0] + "#s=" + enc;
+  try { await navigator.clipboard.writeText(url); toast("Link copied!"); }
+  catch { prompt("Copy this link:", url); }
+};
+
+// ---------- import from link ----------
+(function importShared() {
+  const m = location.hash.match(/^#s=(.+)$/); if (!m) return;
+  try {
+    const d = JSON.parse(decodeURIComponent(escape(atob(m[1]))));
+    if (!Array.isArray(d.l)) throw 0;
+    if (confirm(`Load ${String(d.n).slice(0, 20)}'s ${d.l.length} picks as the partner?`)) {
+      for (const c of d.c || []) if (!pool().some(x => x.name === c)) S.custom.push(String(c).slice(0, 30));
+      S.players[1].name = String(d.n).slice(0, 20);
+      S.players[1].liked = d.l.map(String).slice(0, 1000);
+      S.active = 0; save(); tab = "matches";
+    }
+  } catch { toast("Couldn't read that link"); }
+  history.replaceState(null, "", location.pathname + location.search);
+})();
+
+buildDeck(); render();
+</script>
+</body>
+</html>
