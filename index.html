@@ -570,6 +570,22 @@ $("joinBtn").onclick = () => {
   enterRoom(code, 1);
 };
 
+// ---------- stay up to date ----------
+// GitHub Pages caches the HTML for ~10 minutes. Ask the server for the real Last-Modified
+// and, if the loaded copy is older, reload through a fresh URL that bypasses every cache.
+async function checkForUpdate() {
+  try {
+    const r = await fetch(location.pathname, { method: "HEAD", cache: "no-store" });
+    const latest = Date.parse(r.headers.get("last-modified") || "");
+    const loaded = Date.parse(document.lastModified);
+    if (!latest || !loaded || latest <= loaded + 1000) return;
+    if (location.search.includes("v=" + latest)) return; // already tried this version
+    location.replace(location.pathname + "?v=" + latest + location.hash);
+  } catch {}
+}
+checkForUpdate();
+document.addEventListener("visibilitychange", () => { if (!document.hidden) checkForUpdate(); });
+
 buildDeck(); render();
 {
   const m = location.hash.match(/^#room=([a-z0-9-]{8,40})$/);
